@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/smtp"
 	"os"
 	"strconv"
 	"strings"
@@ -103,6 +104,14 @@ func Remind(documentIds []string) error {
 	fmt.Println(message)
 
 	//TODO: Send the e-mail to my personal account, using my bot e-mail account.
+	senderEmail := os.Getenv("SENDER_EMAIL")
+	senderPassword := os.Getenv("SENDER_PASSWORD")
+	recipientEmail := os.Getenv("RECIPIENT_EMAIL")
+	err = SendEmail(recipientEmail, senderEmail, senderPassword, message)
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
 	return nil
 }
 
@@ -141,4 +150,25 @@ type GoogleDocumentParagraphStyle struct {
 
 type GoogleDocumentTextRun struct {
 	Content string `json:"content"`
+}
+
+func SendEmail(recipientAddress string, senderAddress string, senderPassword string, message string) error {
+	from := senderAddress
+	password := senderPassword
+	to := []string{recipientAddress}
+	smtpHost := "smtp.gmail.com"
+	smtpPort := "587"
+
+	messageByte := []byte(message)
+
+	// Create authentication
+	auth := smtp.PlainAuth("", from, password, smtpHost)
+
+	// Send actual message
+	err := smtp.SendMail(smtpHost+":"+smtpPort, auth, from, to, messageByte)
+	if err != nil {
+		fmt.Println("Send Email failed.")
+		return err
+	}
+	return nil
 }
