@@ -68,6 +68,7 @@ jobs:
 
       - name: Deploy Lambda function
         run: |
+          cd artifacts
           aws lambda update-function-code \
             --function-name journal-reminder \
             --zip-file fileb://dist.zip
