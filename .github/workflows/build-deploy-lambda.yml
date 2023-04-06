@@ -66,8 +66,10 @@ jobs:
           aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET_KEY }}
           aws configure set region ${{ secrets.AWS_REGION }}
 
-      - name: Unzip function code
-        run: unzip dist.zip
+      - name: Unzip ZIP file
+        run: |
+          cd artifacts
+          unzip dist.zip
 
       - name: Deploy Lambda function
         run: |
