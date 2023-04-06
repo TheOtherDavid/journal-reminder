@@ -66,13 +66,8 @@ jobs:
           aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET_KEY }}
           aws configure set region ${{ secrets.AWS_REGION }}
 
-      - name: Unzip ZIP file
-        run: |
-          cd artifacts
-          unzip dist.zip
-
       - name: Deploy Lambda function
         run: |
           aws lambda update-function-code \
             --function-name journal-reminder \
-            --zip-file fileb://journal-reminder.zip
+            --zip-file fileb://dist.zip
