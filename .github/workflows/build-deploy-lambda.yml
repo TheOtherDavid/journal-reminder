@@ -20,7 +20,7 @@ jobs:
 
       - name: Build Lambda function
         run: |
-          GOOS=linux GOARCH=amd64 go build -o journal-reminder
+          GOOS=linux GOARCH=amd64 go build -o main cmd/aws-lambda/main.go
           go mod vendor
           mkdir deployment
           cp journal-reminder deployment/
