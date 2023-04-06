@@ -8,7 +8,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch'
 
     steps:
       - name: Checkout code
@@ -34,3 +33,32 @@ jobs:
         with:
           name: dist
           path: dist.zip
+  deploy:
+    needs: build
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download ZIP file from artifacts
+        uses: actions/download-artifact@v2
+        with:
+          name: dist
+          path: dist.zip
+
+      - name: Install AWS CLI
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-pip
+          pip3 install awscli --upgrade --user
+
+      - name: Configure AWS credentials
+        run: |
+          aws configure set aws_access_key_id ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws configure set default.region ${{ secrets.AWS_REGION }}
+
+      - name: Deploy Lambda function
+        run: |
+          aws lambda update-function-code \
+            --function-name journal-reminder \
+            --zip-file fileb://dist.zip
