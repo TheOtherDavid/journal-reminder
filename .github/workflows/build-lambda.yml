@@ -1,0 +1,35 @@
+name: Build Lambda function
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.17
+
+      - name: Build Lambda function
+        run: |
+          GOOS=linux GOARCH=amd64 go build -o journal-reminder
+          go mod vendor
+          mkdir deployment
+          cp journal-reminder deployment/
+          cp -r vendor deployment/
+          cd deployment
+          zip -r ../dist.zip *
+
+      - name: Upload ZIP file to artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: dist
+          path: dist.zip
