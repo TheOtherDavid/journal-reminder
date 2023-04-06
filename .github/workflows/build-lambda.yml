@@ -35,7 +35,6 @@ jobs:
           path: dist.zip
   deploy:
     needs: build
-    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
 
     steps:
