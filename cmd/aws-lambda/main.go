@@ -1,28 +1,21 @@
 package main
 
 import (
-	"bytes"
-	"encoding/csv"
-	"fmt"
-
+	"context"
 	"github.com/TheOtherDavid/journal-reminder"
 	"github.com/aws/aws-lambda-go/lambda"
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/aws/aws-sdk-go/service/s3/s3manager"
-
-	"net/http"
-	"os"
-	"strconv"
-	"strings"
 )
 
 func main() {
 	lambda.Start(handleRequest)
 }
 
-func handleRequest() (string, error) {
-	remind.Remind()
+type MyEvent struct {
+	DocumentIDs []string `json:"documentIds"`
+}
+
+func handleRequest(ctx context.Context, event MyEvent) (string, error) {
+	documentIds := event.DocumentIDs
+	remind.Remind(documentIds)
 	return "Success", nil
 }
