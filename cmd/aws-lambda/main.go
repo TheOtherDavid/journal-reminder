@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/TheOtherDavid/journal-reminder"
 	"github.com/aws/aws-lambda-go/lambda"
+	"math/rand"
 )
 
 func main() {
@@ -11,11 +12,14 @@ func main() {
 }
 
 type MyEvent struct {
-	DocumentIDs []string `json:"documentIds"`
+	DocumentIds []string `json:"documentIds"`
 }
 
 func handleRequest(ctx context.Context, event MyEvent) (string, error) {
-	documentIds := event.DocumentIDs
-	remind.Remind(documentIds)
+	documentIds := event.DocumentIds
+	//Choose a random year to send the reminder for
+	randIndex := rand.Intn(len(documentIds))
+	documentId := documentIds[randIndex]
+	remind.Remind([]string{documentId})
 	return "Success", nil
 }
