@@ -46,18 +46,16 @@ jobs:
           name: dist
           path: artifacts
 
-      - name: Debug
-        run: |
-          echo "=== Artifacts ==="
-          ls -laR artifacts
-          echo "=== Artifacts/deployment ==="
-          ls -laR artifacts/deployment
-
       - name: Download ZIP file from artifacts
         uses: actions/download-artifact@v2
         with:
           name: dist
           path: dist.zip
+
+      - name: Debug
+        run: |
+          echo "=== Artifacts ==="
+          ls -laR artifacts
 
       - name: Install AWS CLI
         run: |
