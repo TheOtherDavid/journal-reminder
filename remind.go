@@ -287,7 +287,7 @@ func RefreshGoogleAuth() (authCode string) {
 }
 
 func getDocsService() (*docs.Service, error) {
-	keyFilePath := "credentials.json"
+	keyFilePath := "cmd/aws-lambda/credentials.json"
 	keyData, err := ioutil.ReadFile(keyFilePath)
 	if err != nil {
 		return nil, err
