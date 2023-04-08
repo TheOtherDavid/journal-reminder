@@ -26,6 +26,7 @@ jobs:
           mkdir deployment
           cp journal-reminder deployment/
           cp -r vendor deployment/
+          echo "${{ secrets.GOOGLE_CREDENTIALS }}" > deployment/credentials.json
           cd deployment
           zip -r ../dist.zip *
 
@@ -47,7 +48,10 @@ jobs:
 
       - name: Debug
         run: |
+          echo "=== Artifacts ==="
           ls -laR artifacts
+          echo "=== Artifacts/deployment ==="
+          ls -laR artifacts/deployment
 
       - name: Download ZIP file from artifacts
         uses: actions/download-artifact@v2

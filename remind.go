@@ -20,7 +20,7 @@ import (
 
 func Remind(documentIds []string) (err error) {
 	// Create a new Docs service client with the token source
-	client, err := GetGoogleClient()
+	client, err := getDocsService()
 	if err != nil {
 		log.Fatalf("Unable to create client: %v", err)
 	}
@@ -284,4 +284,26 @@ func RefreshGoogleAuth() (authCode string) {
 	authCode = os.Getenv("GCP_AUTH_CODE")
 
 	return authCode
+}
+
+func getDocsService() (*docs.Service, error) {
+	keyFilePath := "credentials.json"
+	keyData, err := ioutil.ReadFile(keyFilePath)
+	if err != nil {
+		return nil, err
+	}
+
+	conf, err := google.JWTConfigFromJSON(keyData, docs.DocumentsScope)
+	if err != nil {
+		return nil, err
+	}
+
+	ctx := context.Background()
+	client := conf.Client(ctx)
+	docsService, err := docs.New(client)
+	if err != nil {
+		return nil, err
+	}
+
+	return docsService, nil
 }
