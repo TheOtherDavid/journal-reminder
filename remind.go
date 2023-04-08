@@ -3,6 +3,7 @@ package remind
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -120,6 +121,15 @@ func Remind(documentIds []string) (err error) {
 	senderEmail := os.Getenv("SENDER_EMAIL")
 	senderPassword := os.Getenv("SENDER_PASSWORD")
 	recipientEmail := os.Getenv("RECIPIENT_EMAIL")
+	if senderEmail == "" {
+		return errors.New("SENDER_EMAIL env variable not set")
+	}
+	if senderPassword == "" {
+		return errors.New("SENDER_PASSWORD env variable not set")
+	}
+	if recipientEmail == "" {
+		return errors.New("RECIPIENT_EMAIL env variable not set")
+	}
 	err = SendEmail(recipientEmail, senderEmail, senderPassword, message)
 	if err != nil {
 		fmt.Println(err)
