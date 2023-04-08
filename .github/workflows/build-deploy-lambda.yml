@@ -27,7 +27,7 @@ jobs:
           mkdir -p deployment/cmd/aws-lambda
           cp journal-reminder deployment/
           cp -r vendor deployment/
-          echo "${{ secrets.GOOGLE_CREDENTIALS }}" | base64 --decode > deployment/cmd/aws-lambda/credentials.json
+          echo '${{ secrets.GOOGLE_CREDENTIALS }}' > deployment/cmd/aws-lambda/credentials.json
           cd deployment
           zip -r ../dist.zip *
 
