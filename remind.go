@@ -130,7 +130,9 @@ func Remind(documentIds []string) (err error) {
 	if recipientEmail == "" {
 		return errors.New("RECIPIENT_EMAIL env variable not set")
 	}
+	fmt.Println("Sending email")
 	err = SendEmail(recipientEmail, senderEmail, senderPassword, message)
+	fmt.Println("Email sent.")
 	if err != nil {
 		fmt.Println(err)
 		return err
