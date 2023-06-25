@@ -86,6 +86,7 @@ func Remind(documentIds []string) (err error) {
 									headingDate, err = time.Parse(layout, dateString)
 									if err != nil {
 										fmt.Println("European date parse failed too. What's wrong?")
+										fmt.Println(dateString)
 										return err
 									}
 								}
