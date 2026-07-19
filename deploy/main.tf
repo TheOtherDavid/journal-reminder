@@ -47,6 +47,12 @@ variable "sender_password_ssm_param" {
   default = "/journal-reminder/sender-password"
 }
 
+variable "alarm_email" {
+  type        = string
+  default     = "davidhand1988@gmail.com"
+  description = "Address that receives CloudWatch alarm notifications."
+}
+
 variable "document_ids" {
   type        = list(string)
   description = "Google Doc IDs of the journals to sample from."
@@ -163,4 +169,54 @@ resource "aws_lambda_permission" "eventbridge" {
   function_name = aws_lambda_function.journal_reminder.function_name
   principal     = "events.amazonaws.com"
   source_arn    = aws_cloudwatch_event_rule.schedule.arn
+}
+
+# --- Alerting: SNS topic + email, wired to CloudWatch alarms ---
+# The email subscription is created in "PendingConfirmation" state; the
+# recipient must click the confirmation link in the email AWS sends once.
+resource "aws_sns_topic" "alarms" {
+  name = "journal-reminder-alarms"
+}
+
+resource "aws_sns_topic_subscription" "alarms_email" {
+  topic_arn = aws_sns_topic.alarms.arn
+  protocol  = "email"
+  endpoint  = var.alarm_email
+}
+
+# Fires when the function reports one or more errors (Google auth/doc-fetch
+# failure, a panic, or now — since the handler propagates it — an email/SSM
+# failure). Period is one day to match the daily schedule.
+resource "aws_cloudwatch_metric_alarm" "errors" {
+  alarm_name          = "journal-reminder-errors"
+  alarm_description   = "journal-reminder Lambda reported one or more errors."
+  namespace           = "AWS/Lambda"
+  metric_name         = "Errors"
+  dimensions          = { FunctionName = aws_lambda_function.journal_reminder.function_name }
+  statistic           = "Sum"
+  period              = 86400
+  evaluation_periods  = 1
+  threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.alarms.arn]
+  ok_actions          = [aws_sns_topic.alarms.arn]
+}
+
+# Early warning that a run is approaching the 15s timeout (e.g. Google API
+# slowness), before it starts hard-failing.
+resource "aws_cloudwatch_metric_alarm" "duration" {
+  alarm_name          = "journal-reminder-slow"
+  alarm_description   = "journal-reminder Lambda run took over 12s (timeout is 15s)."
+  namespace           = "AWS/Lambda"
+  metric_name         = "Duration"
+  dimensions          = { FunctionName = aws_lambda_function.journal_reminder.function_name }
+  statistic           = "Maximum"
+  period              = 86400
+  evaluation_periods  = 1
+  threshold           = 12000 # milliseconds
+  comparison_operator = "GreaterThanThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.alarms.arn]
+  ok_actions          = [aws_sns_topic.alarms.arn]
 }

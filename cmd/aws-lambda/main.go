@@ -22,6 +22,8 @@ func handleRequest(ctx context.Context, event MyEvent) (string, error) {
 	rand.Seed(time.Now().UnixNano())
 	randIndex := rand.Intn(len(documentIds))
 	documentId := documentIds[randIndex]
-	remind.Remind([]string{documentId})
+	if err := remind.Remind([]string{documentId}); err != nil {
+		return "", err
+	}
 	return "Success", nil
 }
