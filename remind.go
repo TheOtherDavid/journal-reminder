@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/smtp"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -18,6 +19,11 @@ import (
 	docs "google.golang.org/api/docs/v1"
 	"google.golang.org/api/option"
 )
+
+// dateRe extracts a M/D/YYYY or D/M/YYYY date from heading text, ignoring any
+// surrounding characters (weekday suffixes, colons, or non-printing characters
+// such as zero-width spaces that Google Docs can insert).
+var dateRe = regexp.MustCompile(`\d{1,2}/\d{1,2}/\d{4}`)
 
 func Remind(documentIds []string) (err error) {
 	// Create a new Docs service client with the token source
@@ -72,22 +78,26 @@ func Remind(documentIds []string) (err error) {
 						if element.TextRun != nil {
 							textRunContent := element.TextRun.Content
 							if textRunContent != "" && textRunContent != "\n" {
-								//check the date on the entry
-								dateString := strings.Split(textRunContent, ",")[0]
-								headingDate := time.Time{}
-								layout := ""
+								//check the date on the entry.
+								//Extract the date with a regex so surrounding text or
+								//non-printing characters (e.g. zero-width spaces) don't
+								//break parsing.
+								dateString := dateRe.FindString(textRunContent)
+								if dateString == "" {
+									//No date in this heading; skip it rather than aborting the run.
+									fmt.Printf("No date found in heading text: %q\n", textRunContent)
+									continue
+								}
 
-								layout = "1/2/2006"
-								//Convert to date
-								headingDate, err := time.Parse(layout, dateString)
+								//Try US (M/D/YYYY) first, then European (D/M/YYYY).
+								headingDate, err := time.Parse("1/2/2006", dateString)
 								if err != nil {
-									fmt.Println("English date parse failed, trying European.")
-									layout = "2/1/2006"
-									headingDate, err = time.Parse(layout, dateString)
+									headingDate, err = time.Parse("2/1/2006", dateString)
 									if err != nil {
-										fmt.Println("European date parse failed too. What's wrong?")
-										fmt.Println(dateString)
-										return err
+										//Still unparseable; skip this heading instead of
+										//failing the entire run.
+										fmt.Printf("Skipping unparseable date %q: %v\n", dateString, err)
+										continue
 									}
 								}
 								//Now we need to compare the target (current) date to the heading date, to see if this is today's entry.
