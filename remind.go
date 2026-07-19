@@ -48,85 +48,15 @@ func Remind(documentIds []string) (err error) {
 		fmt.Printf("The document title is: %s\n", doc.Title)
 		//fmt.Printf("The document content is: %s\n", doc.Body.Content)
 
-		//Maybe this could be pulled into a "extract journal entry" function
-
-		//Take the target year from the journal title
-		targetYear := doc.Title[8:]
-		targetYearInt, _ := strconv.Atoi(targetYear)
-		currentTime := time.Now()
-		targetDate := time.Date(targetYearInt, currentTime.Month(), currentTime.Day(), 0, 0, 0, 0, time.UTC)
-		//currentDayString := currentTime.Format("1/2/2006")
-
-		append := false
-		done := false
-
-		for _, contentItem := range doc.Body.Content {
-			//Parse file, specifically try to look for headers.
-			//If the current content list's text is type Heading 4, then we need to append the NEXT several paragraphs to a message.
-			//Then we need to do that UNTIL there's another Heading.
-			if done {
-				break
-			}
-			if contentItem.Paragraph != nil && contentItem.Paragraph.ParagraphStyle.NamedStyleType == "HEADING_4" {
-				if append == true {
-					//If we encounter a header when in append mode, we turn off append mode
-					append = false
-					done = true
-					break
-				}
-				if append == false {
-					//If we aren't in append mode, check which date format to use
-					element := contentItem.Paragraph.Elements[0]
-					if element != nil {
-						if element.TextRun != nil {
-							textRunContent := element.TextRun.Content
-							if textRunContent != "" && textRunContent != "\n" {
-								//check the date on the entry.
-								//Extract the date with a regex so surrounding text or
-								//non-printing characters (e.g. zero-width spaces) don't
-								//break parsing.
-								dateString := dateRe.FindString(textRunContent)
-								if dateString == "" {
-									//No date in this heading; skip it rather than aborting the run.
-									fmt.Printf("No date found in heading text: %q\n", textRunContent)
-									continue
-								}
-
-								//Try US (M/D/YYYY) first, then European (D/M/YYYY).
-								headingDate, err := time.Parse("1/2/2006", dateString)
-								if err != nil {
-									headingDate, err = time.Parse("2/1/2006", dateString)
-									if err != nil {
-										//Still unparseable; skip this heading instead of
-										//failing the entire run.
-										fmt.Printf("Skipping unparseable date %q: %v\n", dateString, err)
-										continue
-									}
-								}
-								//Now we need to compare the target (current) date to the heading date, to see if this is today's entry.
-								if headingDate.Equal(targetDate) {
-									//If the heading is the current day, enter append mode
-									append = true
-								}
-							}
-						}
-					}
-				}
-			}
-			//If in append mode, append message
-			if append == true {
-				for _, element := range contentItem.Paragraph.Elements {
-					if element.PageBreak == nil {
-						message = message + element.TextRun.Content
-					} else {
-						fmt.Println("Page break detected.")
-						append = false
-						done = true
-						break
-					}
-				}
-			}
+		year, ok := yearFromTitle(doc.Title)
+		if !ok {
+			fmt.Printf("Could not determine year from title %q; skipping document.\n", doc.Title)
+			continue
 		}
+		currentTime := time.Now()
+		targetDate := time.Date(year, currentTime.Month(), currentTime.Day(), 0, 0, 0, 0, time.UTC)
+
+		message += extractEntryForDate(doc, targetDate)
 	}
 	//Once we have the appropriate journal entries, compose them into an e-mail message
 	fmt.Println(message)
@@ -152,6 +82,97 @@ func Remind(documentIds []string) (err error) {
 		return err
 	}
 	return nil
+}
+
+// titleYearRe pulls the 4-digit year out of a journal title like "Journal 2021".
+var titleYearRe = regexp.MustCompile(`\d{4}`)
+
+// yearFromTitle extracts the 4-digit year from a journal document title.
+// Returns ok=false if the title contains no 4-digit year.
+func yearFromTitle(title string) (int, bool) {
+	m := titleYearRe.FindString(title)
+	if m == "" {
+		return 0, false
+	}
+	y, err := strconv.Atoi(m)
+	if err != nil {
+		return 0, false
+	}
+	return y, true
+}
+
+// parseHeadingDate extracts and parses a M/D/YYYY (US) or D/M/YYYY (European)
+// date from heading text. It tolerates surrounding text and non-printing
+// characters (e.g. zero-width spaces) because it matches the date with a regex
+// rather than relying on the exact heading format. US ordering is tried first.
+// Returns ok=false when no parseable date is present.
+func parseHeadingDate(text string) (time.Time, bool) {
+	dateString := dateRe.FindString(text)
+	if dateString == "" {
+		return time.Time{}, false
+	}
+	if t, err := time.Parse("1/2/2006", dateString); err == nil {
+		return t, true
+	}
+	if t, err := time.Parse("2/1/2006", dateString); err == nil {
+		return t, true
+	}
+	return time.Time{}, false
+}
+
+// extractEntryForDate scans a journal document for the HEADING_4 entry whose
+// date equals target, and returns the text of that entry: the matching heading
+// line plus the paragraphs that follow it, up to (but not including) the next
+// HEADING_4 or a page break. Returns "" when there is no entry for target.
+func extractEntryForDate(doc *docs.Document, target time.Time) string {
+	if doc == nil || doc.Body == nil {
+		return ""
+	}
+	message := ""
+	appendMode := false
+
+	for _, contentItem := range doc.Body.Content {
+		if contentItem.Paragraph == nil {
+			continue
+		}
+		style := contentItem.Paragraph.ParagraphStyle
+		isHeading := style != nil && style.NamedStyleType == "HEADING_4"
+
+		if isHeading {
+			if appendMode {
+				// Reached the next entry's heading: stop.
+				break
+			}
+			// Not yet collecting: does this heading match the target date?
+			if len(contentItem.Paragraph.Elements) > 0 {
+				el := contentItem.Paragraph.Elements[0]
+				if el != nil && el.TextRun != nil {
+					text := el.TextRun.Content
+					if text != "" && text != "\n" {
+						if headingDate, ok := parseHeadingDate(text); ok && headingDate.Equal(target) {
+							appendMode = true
+						}
+					}
+				}
+			}
+		}
+
+		if appendMode {
+			for _, el := range contentItem.Paragraph.Elements {
+				if el == nil {
+					continue
+				}
+				if el.PageBreak != nil {
+					// A page break terminates the entry.
+					return message
+				}
+				if el.TextRun != nil {
+					message += el.TextRun.Content
+				}
+			}
+		}
+	}
+	return message
 }
 
 // getSenderPassword returns the SMTP sender password. It prefers an explicit
