@@ -14,6 +14,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/ssm"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	docs "google.golang.org/api/docs/v1"
@@ -130,16 +133,16 @@ func Remind(documentIds []string) (err error) {
 
 	//TODO: Send the e-mail to my personal account, using my bot e-mail account.
 	senderEmail := os.Getenv("SENDER_EMAIL")
-	senderPassword := os.Getenv("SENDER_PASSWORD")
 	recipientEmail := os.Getenv("RECIPIENT_EMAIL")
 	if senderEmail == "" {
 		return errors.New("SENDER_EMAIL env variable not set")
 	}
-	if senderPassword == "" {
-		return errors.New("SENDER_PASSWORD env variable not set")
-	}
 	if recipientEmail == "" {
 		return errors.New("RECIPIENT_EMAIL env variable not set")
+	}
+	senderPassword, err := getSenderPassword()
+	if err != nil {
+		return fmt.Errorf("unable to get sender password: %w", err)
 	}
 	fmt.Println("Sending email")
 	err = SendEmail(recipientEmail, senderEmail, senderPassword, message)
@@ -149,6 +152,32 @@ func Remind(documentIds []string) (err error) {
 		return err
 	}
 	return nil
+}
+
+// getSenderPassword returns the SMTP sender password. It prefers an explicit
+// SENDER_PASSWORD env var (handy for local CLI runs) and otherwise reads the
+// SecureString SSM parameter named by SENDER_PASSWORD_SSM_PARAM. The secret is
+// therefore never stored in the function's environment or in IaC state.
+func getSenderPassword() (string, error) {
+	if v := os.Getenv("SENDER_PASSWORD"); v != "" {
+		return v, nil
+	}
+	name := os.Getenv("SENDER_PASSWORD_SSM_PARAM")
+	if name == "" {
+		return "", errors.New("neither SENDER_PASSWORD nor SENDER_PASSWORD_SSM_PARAM is set")
+	}
+	sess, err := session.NewSession()
+	if err != nil {
+		return "", err
+	}
+	out, err := ssm.New(sess).GetParameter(&ssm.GetParameterInput{
+		Name:           aws.String(name),
+		WithDecryption: aws.Bool(true),
+	})
+	if err != nil {
+		return "", err
+	}
+	return aws.StringValue(out.Parameter.Value), nil
 }
 
 func getToken(config *oauth2.Config) (*oauth2.Token, error) {

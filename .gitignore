@@ -1,3 +1,13 @@
 credentials.json
 token.json
 .vscode
+
+# Build artifacts
+bootstrap
+dist.zip
+pkg/
+
+# OpenTofu
+deploy/.terraform/
+*.tfstate
+*.tfstate.*

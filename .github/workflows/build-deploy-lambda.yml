@@ -1,78 +1,54 @@
-name: Build & Deploy Lambda function
+name: Build & Deploy (OpenTofu)
 
 on:
   push:
     branches:
       - main
+  workflow_dispatch:
+
+# Serialize deploys so two runs can't fight over the OpenTofu state lock.
+concurrency:
+  group: journal-reminder-deploy
+  cancel-in-progress: false
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
-
-      - name: Set up Go
-        uses: actions/setup-go@v2
-        with:
-          go-version: 1.17
-
-      - name: Build Lambda function
-        run: |
-          GOOS=linux GOARCH=amd64 go build -o journal-reminder cmd/aws-lambda/main.go
-          chmod +x journal-reminder
-          go mod vendor
-          mkdir deployment
-          mkdir -p deployment/cmd/aws-lambda
-          cp journal-reminder deployment/
-          cp -r vendor deployment/
-          echo '${{ secrets.GOOGLE_CREDENTIALS }}' > deployment/cmd/aws-lambda/credentials.json
-          cd deployment
-          zip -r ../dist.zip *
-
-      - name: Upload ZIP file to artifacts
-        uses: actions/upload-artifact@v2
-        with:
-          name: dist
-          path: dist.zip
   deploy:
-    needs: build
     runs-on: ubuntu-latest
-
+    env:
+      AWS_REGION: us-east-2
+      TF_STATE_BUCKET: journal-reminder-tofu-state-145126693924
     steps:
-      - name: List artifacts
-        uses: actions/download-artifact@v2
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
         with:
-          name: dist
-          path: artifacts
+          go-version: "1.22"
 
-      - name: Download ZIP file from artifacts
-        uses: actions/download-artifact@v2
-        with:
-          name: dist
-          path: dist.zip
+      - name: Test
+        run: go test ./...
 
-      - name: Debug
+      - name: Build bootstrap and package zip
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
         run: |
-          echo "=== Artifacts ==="
-          ls -laR artifacts
-
-      - name: Install AWS CLI
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y python3-pip
-          pip3 install awscli --upgrade --user
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o bootstrap ./cmd/aws-lambda
+          mkdir -p pkg/cmd/aws-lambda
+          cp bootstrap pkg/
+          printf '%s' "$GOOGLE_CREDENTIALS" > pkg/cmd/aws-lambda/credentials.json
+          (cd pkg && zip -r ../dist.zip .)
 
       - name: Configure AWS credentials
         run: |
-          aws configure set aws_access_key_id ${{ secrets.AWS_ACCESS_KEY }}
-          aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET_KEY }}
-          aws configure set region ${{ secrets.AWS_REGION }}
+          aws configure set aws_access_key_id "${{ secrets.AWS_ACCESS_KEY }}"
+          aws configure set aws_secret_access_key "${{ secrets.AWS_SECRET_KEY }}"
+          aws configure set region "${AWS_REGION}"
 
-      - name: Deploy Lambda function
-        run: |
-          cd artifacts
-          aws lambda update-function-code \
-            --function-name journal-reminder \
-            --zip-file fileb://dist.zip
+      - uses: opentofu/setup-opentofu@v1
+
+      - name: Tofu init
+        working-directory: deploy
+        run: tofu init -backend-config="bucket=${TF_STATE_BUCKET}" -backend-config="region=${AWS_REGION}"
+
+      - name: Tofu apply
+        working-directory: deploy
+        run: tofu apply -auto-approve
